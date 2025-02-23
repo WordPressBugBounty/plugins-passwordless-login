@@ -4,7 +4,7 @@ Contributors: sareiodata, cozmoslabs
 Donate link: http://www.cozmoslabs.com/wordpress-profile-builder/
 Tags: passwordless login, passwordless, front-end login, login shortcode, custom login form, login without password, passwordless authentication
 Requires at least: 3.9
-Tested up to: 6.4.3
+Tested up to: 6.7.1
 Stable tag: 1.1.3
 
 

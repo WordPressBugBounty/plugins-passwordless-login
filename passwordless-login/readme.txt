@@ -4,8 +4,8 @@ Contributors: sareiodata, cozmoslabs
 Donate link: http://www.cozmoslabs.com/wordpress-profile-builder/
 Tags: passwordless login, passwordless, front-end login, login shortcode, custom login form, login without password, passwordless authentication
 Requires at least: 3.9
-Tested up to: 6.7.1
-Stable tag: 1.1.3
+Tested up to: 6.9
+Stable tag: 1.1.4
 
 
 Passwordless login form via a simple to use shortcode: [passwordless-login]
@@ -76,6 +76,13 @@ Passwordless Authentication dose not replace the default login functionality in 
 
 
 == Changelog ==
+= 1.1.4 =
+* Fix: Allow 2 forms on the same page to process correctly
+* Fix: A compatibility bug with the Allow Users To Login With option from Profile Builder
+* Fix: Switched from using ids to style the form to using classes
+* Fix: Add translation support for the Login form submit button
+* Misc: Added a filter to disable the automatic redirect to homepage for HEAD requests
+
 = 1.1.3 =
 * Fix: XSS issue with the already logged in message. Thanks to Mat Rollings
 * Fix: Added nonce check for the admin notice dismiss action

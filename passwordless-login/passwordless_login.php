@@ -3,7 +3,7 @@
 * Plugin Name: Passwordless Login
 * Plugin URI: https://www.cozmoslabs.com
 * Description: Shortcode based login form. Enter an email/username and get link via email that will automatically log you in.
-* Version: 1.1.3
+* Version: 1.1.4
 * Author: Cozmoslabs, sareiodata
 * Author URI: https://www.cozmoslabs.com
 * License: GPL2
@@ -34,7 +34,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  *
  *
  */
-define( 'PASSWORDLESS_LOGIN_VERSION', '1.1.3' );
+define( 'PASSWORDLESS_LOGIN_VERSION', '1.1.4' );
 define( 'WPA_PLUGIN_DIR', WP_PLUGIN_DIR . '/' . dirname( plugin_basename( __FILE__ ) ) );
 define( 'WPA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -145,11 +145,20 @@ add_action( 'wp_print_styles', 'wpa_add_plugin_stylesheet' );
  */
 function wpa_front_end_login(){
 	ob_start();
-	$account        = ( isset( $_POST['user_email_username']) ) ? $account = sanitize_text_field( $_POST['user_email_username'] ) : false;
-	$error_token    = ( isset( $_GET['wpa_error_token']) ) ? $error_token  = sanitize_key( $_GET['wpa_error_token'] ) : false;
-	$adminapp_error = ( isset( $_GET['wpa_adminapp_error']) ) ? sanitize_key( $_GET['wpa_adminapp_error'] ) : false;
+    $account        = isset( $_POST['user_email_username']) ? sanitize_text_field( $_POST['user_email_username'] ) : false;
+    $error_token    = isset( $_GET['wpa_error_token']) ? sanitize_key( $_GET['wpa_error_token'] ) : false;
+    $adminapp_error = isset( $_GET['wpa_adminapp_error']) ? sanitize_key( $_GET['wpa_adminapp_error'] ) : false;
 
 	$sent_link = get_option('wpa_login_request_error');
+
+    // This extra check is needed for multiple form instances on the same page
+    if( !$sent_link ){
+        $nonce = isset( $_POST['nonce'] ) ? sanitize_key( $_POST['nonce'] ) : false;
+        $sent_link = wpa_send_link( $account, $nonce );
+
+        if( $sent_link )
+            update_option( 'wpa_login_request_error', $sent_link );
+    }
 
 	if( $account && !is_wp_error($sent_link) ){
 		echo '<p class="wpa-box wpa-success">'. apply_filters('wpa_success_link_msg', __('Please check your email. You will soon receive an email with a login link.', 'passwordless-login') ) .'</p>';
@@ -157,25 +166,26 @@ function wpa_front_end_login(){
 		$current_user = wp_get_current_user();
 		echo '<p class="wpa-box wpa-alert">'.apply_filters('wpa_success_login_msg', sprintf(__( 'You are currently logged in as %1$s. %2$s', 'passwordless-login' ), '<a href="'.esc_url( get_author_posts_url( $current_user->ID ) ).'" title="'.esc_attr( $current_user->display_name ).'">'.esc_html( $current_user->display_name ).'</a>', '<a href="'.esc_url( wp_logout_url( $redirectTo = wpa_curpageurl() ) ).'" title="'.__( 'Log out of this account', 'passwordless-login' ).'">'. __( 'Log out', 'passwordless-login').' &raquo;</a>' ) ) . '</p><!-- .alert-->';
 	} else {
-		if ( is_wp_error($sent_link) ){
-			echo '<p class="wpa-box wpa-error">' . esc_html( apply_filters( 'wpa_error', $sent_link->get_error_message() ) ) . '</p>';
-		}
-		if( $error_token ) {
-			echo '<p class="wpa-box wpa-error">' . apply_filters( 'wpa_invalid_token_error', __('Your token has probably expired. Please try again.', 'passwordless-login') ) . '</p>';
-		}
+        if ( is_wp_error($sent_link) ){
+            echo '<p class="wpa-box wpa-error">' . esc_html( apply_filters( 'wpa_error', $sent_link->get_error_message() ) ) . '</p>';
+        }
+        if( $error_token ) {
+            echo '<p class="wpa-box wpa-error">' . apply_filters( 'wpa_invalid_token_error', __('Your token has probably expired. Please try again.', 'passwordless-login') ) . '</p>';
+        }
         if( $adminapp_error ) {//admin approval compatibility
             echo '<p class="wpa-box wpa-error">' . apply_filters( 'wpa_admin_approval_error', __('Your account needs to be approved by an admin before you can log-in.', 'passwordless-login') ) . '</p>';
         }
+
 		include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
 		//Setting up the label for the password request form based on the Allows Users to Login With Profile Builder Option
-		if (is_plugin_active('profile-builder-pro/index.php') || is_plugin_active('profile-builder/index.php') || is_plugin_active('profile-builder-hobbyist/index.php')) {
+		if ( is_plugin_active('profile-builder-dev/index.php') || is_plugin_active('profile-builder-pro/index.php') || is_plugin_active('profile-builder/index.php') || is_plugin_active('profile-builder-hobbyist/index.php') ) {
 			$wppb_general_options = get_option('wppb_general_settings');
 
 			if ($wppb_general_options !== false) {
 				if ($wppb_general_options['loginWith'] == 'email')
-					$label = __('Login with email', 'passwordless-login') . '<br>';
+					$label = __('Login with email', 'passwordless-login');
 				else if ($wppb_general_options['loginWith'] == 'username')
-					$label = __('Login with username', 'passwordless-login') . '<br>';
+					$label = __('Login with username', 'passwordless-login');
 				else
 					$label = __('Login with email or username', 'passwordless-login');
 			}
@@ -183,12 +193,11 @@ function wpa_front_end_login(){
 		else
 			$label = __('Login with email or username', 'passwordless-login');
 		?>
-	<form name="wpaloginform" id="wpaloginform" action="" method="post">
-		<p>
-			<label for="user_email_username"><?php echo esc_html( apply_filters('wpa_change_form_label', $label ) ); ?></label>
-			<input type="text" name="user_email_username" id="user_email_username" class="input" value="<?php echo esc_attr( $account ); ?>" size="25" />
-			<input type="submit" name="wpa-submit" id="wpa-submit" class="button-primary" value="<?php esc_attr_e('Log In', 'passwordless-login'); ?>" />
-		</p>
+	<form name="wpaloginform" class="wpaloginform" action="" method="post">
+        <label class="wpa-login-label"><?php echo wp_kses_post( apply_filters('wpa_change_form_label', $label ) ); ?></label>
+        <input type="text" name="user_email_username" class="input wpa-user-email-username" value="<?php echo esc_attr( $account ); ?>" size="25" />
+        <input type="submit" name="wpa-submit" class="button-primary wpa-submit" value="<?php echo esc_attr( __('Log In', 'passwordless-login') ); ?>" />
+
 		<?php do_action('wpa_login_form'); ?>
 		<?php wp_nonce_field( 'wpa_passwordless_login_request', 'nonce', false ) ?>
 
@@ -250,7 +259,6 @@ function wpa_send_login_request() {
 
         if ( $sent_link )
             update_option( 'wpa_login_request_error', $sent_link ); // save returned errors if the email notification could not be sent
-
     }
 }
 add_action( 'init', 'wpa_send_login_request' );
@@ -272,6 +280,13 @@ function wpa_send_link( $email_account = false, $nonce = false ){
 	if (is_wp_error($valid_email)){
 		$errors->add('invalid_account', $valid_email->get_error_message());
 	} else{
+        // Prevent duplicate sends for the same email for 10 seconds
+        $lock_key = 'wpa_send_link_lock_' . md5( strtolower( $valid_email ) );
+        if ( get_transient( $lock_key ) ) {
+            return false;
+        }
+        set_transient( $lock_key, 1, 10 );
+
 		$blog_name = get_bloginfo( 'name' );
 		$blog_name = esc_attr( $blog_name );
 
@@ -284,8 +299,9 @@ function wpa_send_link( $email_account = false, $nonce = false ){
 		$headers = apply_filters('wpa_email_headers', '', $unique_url, $valid_email);
 		$sent_mail = wp_mail( $valid_email, $subject, $message, $headers );
 
-		if ( !$sent_mail ){
+        if ( !$sent_mail ){
 			$errors->add('email_not_sent', __('There was a problem sending your email. Please try again or contact an admin.', 'passwordless-login'));
+            delete_transient( $lock_key );
 		}
 	}
 	$error_codes = $errors->get_error_codes();
@@ -332,9 +348,15 @@ add_action( 'init', 'wpa_autologin_via_url' );
 function wpa_autologin_via_url(){
 
     if( $_SERVER['REQUEST_METHOD'] === "HEAD" ){
-        // Redirect to HomePage when REQUEST_METHOD is set to HEAD (avoid issues regarding antivirus Link Protection)
-        wp_redirect( home_url(), 301 );
-        exit;
+        // Allow sites to disable HEAD redirects (e.g. REST API/webhooks).
+        $redirect_head_requests = apply_filters( 'wpa_redirect_head_requests', true );
+
+        if ( $redirect_head_requests ) {
+            // Redirect to HomePage when REQUEST_METHOD is set to HEAD (avoid issues regarding antivirus Link Protection)
+            wp_redirect( home_url(), 301 );
+            exit;
+        }
+
     }
 
 	if( isset( $_GET['token'] ) && isset( $_GET['uid'] ) && isset( $_GET['nonce'] ) ){
@@ -439,7 +461,7 @@ function wpa_curpageurl() {
     $req_uri = preg_replace( $home_path_regex, '', $req_uri );
     $req_uri = trim(home_url(), '/') . '/' . ltrim( $req_uri, '/' );
 
-    return $req_uri;
+    return apply_filters( 'wpa_curpageurl', $req_uri );
 }
 
 
